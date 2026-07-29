@@ -42,7 +42,7 @@
     "generated": "protocol.generated.ts"
   },
   "dependencies": {
-    "@kybernetria/pi-protocol": "https://github.com/Kybernetria/pi-protocol/releases/download/v3.0.1/kybernetria-pi-protocol-3.0.1.tgz",
+    "@kybernetria/pi-protocol": "https://github.com/Kybernetria/pi-protocol/releases/download/v3.0.2/kybernetria-pi-protocol-3.0.2.tgz",
     "@mariozechner/pi-ai": "npm:@earendil-works/pi-ai@^0.80.10"
   },
   "peerDependencies": {
