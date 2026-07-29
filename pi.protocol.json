@@ -1,0 +1,264 @@
+{
+  "protocolVersion": "0.2.0",
+  "nodeId": "pi_toolkit",
+  "packageId": "pi-toolkit",
+  "version": "0.1.0",
+  "purpose": "Bounded access to the native community-stack toolkit catalog over its authenticated local Unix socket API.",
+  "tags": ["toolkit", "community-stack", "local", "catalog"],
+  "provides": [
+    {
+      "name": "schema",
+      "version": "0.1.0",
+      "description": "List up to 100 active native toolkit concepts, or show one exact concept key and optional immutable revision. Unknown input fields are rejected by the handler.",
+      "tags": ["toolkit", "schema", "read"],
+      "effects": ["local_ipc", "database_read"],
+      "inputSchema": {
+        "type": "object",
+        "required": ["operation"],
+        "description": "Strict schema request. operation=list accepts optional limit 1-100; operation=show requires key and accepts a 64-hex revision. communityId optionally overrides the host default.",
+        "properties": {
+          "operation": { "type": "string", "enum": ["list", "show"], "description": "Native toolkit.schema.list or toolkit.schema.show selection." },
+          "communityId": { "type": "string", "description": "Optional 1-256 byte community override; defaults to COMMUNITY_STACK_COMMUNITY_ID." },
+          "limit": { "type": "integer", "description": "List bound from 1 to 100; defaults to 100." },
+          "key": { "type": "string", "description": "Exact 1-128 byte toolkit concept key for show." },
+          "revision": { "type": "string", "description": "Optional exact immutable 64-hex concept revision; omission resolves the active revision." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["operation", "communityId", "result"],
+        "properties": {
+          "operation": { "type": "string", "enum": ["list", "show"] },
+          "communityId": { "type": "string" },
+          "result": { "description": "Bounded native concept array or exact native concept object." }
+        }
+      },
+      "execution": { "type": "handler", "handler": "schema" }
+    },
+    {
+      "name": "search",
+      "version": "0.1.0",
+      "description": "Run a validated native toolkit.query plan across the bounded catalog or 1-64 explicitly restricted tools and 1-64 total requirements, returning native ranked results and explanations within a 1 MiB output bound.",
+      "tags": ["toolkit", "query", "search", "read"],
+      "effects": ["local_ipc", "database_read"],
+      "inputSchema": {
+        "type": "object",
+        "description": "Strict structured query requiring at least one and at most 64 total requirements across requirements, mandatory, and optional. Omitted or empty tools searches the whole bounded catalog. Unknown fields, duplicate tools, invalid operators, empty queries, and more than 64 total requirements are rejected.",
+        "properties": {
+          "communityId": { "type": "string", "description": "Optional 1-256 byte community override; defaults to COMMUNITY_STACK_COMMUNITY_ID." },
+          "tools": { "type": "array", "description": "Optional restriction containing 0-64 unique exact tool keys; omission or an empty array searches the whole bounded catalog.", "items": { "type": "string" } },
+          "requirements": {
+            "type": "array",
+            "description": "Requirements whose required flag defaults to true.",
+            "items": {
+              "type": "object",
+              "required": ["concept", "op"],
+              "properties": {
+                "concept": { "type": "string", "description": "Exact concept key." },
+                "conceptRevision": { "type": "string", "description": "Optional 64-hex immutable revision." },
+                "op": { "type": "string", "enum": ["eq", "ne", "in", "exists", "gt", "gte", "lt", "lte"] },
+                "value": { "description": "Required scalar (strings at most 1024 bytes) except for exists; in requires 1-16 scalar values." },
+                "required": { "type": "boolean", "description": "Whether this is a hard conjunctive requirement; defaults to true." }
+              }
+            }
+          },
+          "mandatory": {
+            "type": "array",
+            "description": "Requirements normalized by community-stack as required=true.",
+            "items": {
+              "type": "object",
+              "required": ["concept", "op"],
+              "properties": {
+                "concept": { "type": "string" },
+                "conceptRevision": { "type": "string" },
+                "op": { "type": "string", "enum": ["eq", "ne", "in", "exists", "gt", "gte", "lt", "lte"] },
+                "value": { "description": "Required scalar except for exists; in requires an array." }
+              }
+            }
+          },
+          "optional": {
+            "type": "array",
+            "description": "Requirements normalized by community-stack as required=false.",
+            "items": {
+              "type": "object",
+              "required": ["concept", "op"],
+              "properties": {
+                "concept": { "type": "string" },
+                "conceptRevision": { "type": "string" },
+                "op": { "type": "string", "enum": ["eq", "ne", "in", "exists", "gt", "gte", "lt", "lte"] },
+                "value": { "description": "Required scalar except for exists; in requires an array." }
+              }
+            }
+          },
+          "includePartial": { "type": "boolean", "description": "Include non-exact tools with explanations; defaults to true." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["exact_count", "results"],
+        "properties": {
+          "exact_count": { "type": "integer", "description": "Number of exact native matches." },
+          "results": {
+            "type": "array",
+            "description": "At most one native ranked result per matching active catalog tool, including requirement explanations.",
+            "items": {
+              "type": "object",
+              "required": ["tool", "name", "match", "satisfied_requirements", "requirements"],
+              "properties": {
+                "tool": { "type": "string" },
+                "name": { "type": "string" },
+                "match": { "type": "string", "enum": ["exact", "partial"] },
+                "satisfied_requirements": { "type": "integer" },
+                "requirements": { "type": "array", "items": { "type": "object" } }
+              }
+            }
+          }
+        }
+      },
+      "execution": { "type": "handler", "handler": "search" }
+    },
+    {
+      "name": "add_tool",
+      "version": "0.1.0",
+      "description": "Add one native toolkit tool identity. A bounded unique idempotency key is generated when omitted and returned for retry visibility; unknown fields are rejected.",
+      "tags": ["toolkit", "tool", "write"],
+      "effects": ["local_ipc", "database_write", "durable_write"],
+      "policy": { "confirmation": "required" },
+      "inputSchema": {
+        "type": "object",
+        "required": ["key", "name"],
+        "description": "Strict toolkit.tool.add input. Authentication is host-only and cannot be supplied here.",
+        "properties": {
+          "communityId": { "type": "string", "description": "Optional 1-256 byte community override." },
+          "idempotencyKey": { "type": "string", "description": "Optional caller-stable 1-128 byte safe retry ID." },
+          "key": { "type": "string", "description": "Unique 1-128 byte native tool key." },
+          "name": { "type": "string", "description": "Tool name, 1-256 bytes." },
+          "description": { "type": "string", "description": "Optional description, at most 4096 bytes." },
+          "homepage": { "type": "string", "description": "Optional absolute HTTP(S) URL, at most 2048 bytes." },
+          "status": { "type": "string", "enum": ["active", "deprecated"], "description": "Defaults to active." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["communityId", "idempotencyKey", "result"],
+        "properties": {
+          "communityId": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "result": {
+            "type": "object",
+            "required": ["operation_hash", "status", "durable", "state"],
+            "properties": {
+              "operation_hash": { "type": "string" },
+              "status": { "type": "string", "enum": ["APPLIED"] },
+              "durable": { "type": "boolean", "enum": [true] },
+              "state": { "type": "object" }
+            }
+          }
+        }
+      },
+      "execution": { "type": "handler", "handler": "add_tool" }
+    },
+    {
+      "name": "propose_assertion",
+      "version": "0.1.0",
+      "description": "Create one native toolkit assertion proposal. Trusted code always submits origin=ai and verification_state=proposed; callers cannot request verified state. IDs are generated when omitted and returned for safe retry visibility.",
+      "tags": ["toolkit", "assertion", "proposal", "write"],
+      "effects": ["local_ipc", "database_write", "durable_write", "creates_unverified_claim"],
+      "policy": { "confirmation": "required" },
+      "inputSchema": {
+        "type": "object",
+        "required": ["tool", "concept", "value", "source", "evidence", "asOf"],
+        "description": "Strict toolkit.assert proposal input. origin and verification state are intentionally absent and unknown fields are rejected.",
+        "properties": {
+          "communityId": { "type": "string", "description": "Optional 1-256 byte community override." },
+          "idempotencyKey": { "type": "string", "description": "Optional caller-stable 1-128 byte safe retry ID." },
+          "assertionId": { "type": "string", "description": "Optional caller-stable 1-128 byte assertion ID." },
+          "tool": { "type": "string", "description": "Exact native tool key." },
+          "concept": { "type": "string", "description": "Exact native concept key." },
+          "conceptRevision": { "type": "string", "description": "Optional exact 64-hex immutable revision; omission binds the active revision." },
+          "value": { "description": "Explicit non-null JSON string, finite number, or boolean." },
+          "source": { "type": "string", "description": "Required source, at most 2048 bytes." },
+          "evidence": { "type": "string", "description": "Required evidence, at most 8192 bytes." },
+          "asOf": { "type": "string", "description": "Evidence date in YYYY-MM-DD form." },
+          "assessment": {
+            "type": "object",
+            "required": ["rubric", "rubricVersion", "rationale", "evaluatorType", "evaluationDate"],
+            "description": "Optional complete dimension assessment metadata; native policy rejects it for non-dimensions and requires it for dimensions.",
+            "properties": {
+              "rubric": { "type": "string" },
+              "rubricVersion": { "type": "string" },
+              "rationale": { "type": "string" },
+              "evaluatorType": { "type": "string" },
+              "evaluationDate": { "type": "string" }
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["communityId", "idempotencyKey", "assertionId", "result"],
+        "properties": {
+          "communityId": { "type": "string" },
+          "idempotencyKey": { "type": "string" },
+          "assertionId": { "type": "string" },
+          "result": {
+            "type": "object",
+            "required": ["operation_hash", "status", "durable", "state", "assertion_id", "verification_state"],
+            "properties": {
+              "operation_hash": { "type": "string" },
+              "status": { "type": "string", "enum": ["APPLIED"] },
+              "durable": { "type": "boolean", "enum": [true] },
+              "state": { "type": "object" },
+              "assertion_id": { "type": "string" },
+              "verification_state": { "type": "string", "enum": ["proposed"] }
+            }
+          }
+        }
+      },
+      "execution": { "type": "handler", "handler": "propose_assertion" }
+    },
+    {
+      "name": "list_tools",
+      "version": "0.1.0",
+      "description": "List one explicit deterministic page of native toolkit tool identities through toolkit.export without exposing concepts, assertions, or reviews. Unknown fields are rejected by the handler.",
+      "tags": ["toolkit", "tool", "catalog", "read", "list"],
+      "effects": ["local_ipc", "database_read"],
+      "inputSchema": {
+        "type": "object",
+        "description": "Strict toolkit.export page input. communityId is optional; offset defaults to 0 and is bounded from 0 to 100000; limit defaults to 100 and is bounded from 1 to 500.",
+        "properties": {
+          "communityId": { "type": "string", "description": "Optional 1-256 byte community override; defaults to COMMUNITY_STACK_COMMUNITY_ID." },
+          "offset": { "type": "integer", "description": "Zero-based export offset from 0 to 100000; defaults to 0." },
+          "limit": { "type": "integer", "description": "Maximum exported tools from 1 to 500; defaults to 100." }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["communityId", "offset", "limit", "tools", "hasMoreHint"],
+        "properties": {
+          "communityId": { "type": "string" },
+          "offset": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "tools": {
+            "type": "array",
+            "description": "The bounded, key-sorted native toolkit.export tools page only.",
+            "items": {
+              "type": "object",
+              "required": ["key", "name", "description", "homepage", "status", "source_operation_hash"],
+              "properties": {
+                "key": { "type": "string" },
+                "name": { "type": "string" },
+                "description": { "description": "Native tool description string or null." },
+                "homepage": { "description": "Native homepage string or null." },
+                "status": { "type": "string", "enum": ["active", "deprecated"] },
+                "source_operation_hash": { "type": "string" }
+              }
+            }
+          },
+          "hasMoreHint": { "type": "boolean", "description": "True exactly when tools.length equals limit; callers may request the next offset to confirm." }
+        }
+      },
+      "execution": { "type": "handler", "handler": "list_tools" }
+    }
+  ]
+}

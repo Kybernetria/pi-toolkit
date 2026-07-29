@@ -1,0 +1,40 @@
+{
+  "name": "pi-toolkit",
+  "version": "0.1.0",
+  "description": "Handler-backed Pi protocol access to the native community-stack toolkit database.",
+  "type": "module",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "keywords": ["pi-package", "pi-protocol", "community-stack", "toolkit"],
+  "exports": {
+    ".": "./extension.ts",
+    "./client": "./src/client.ts",
+    "./handlers": "./src/handlers.ts",
+    "./pi.protocol.json": "./pi.protocol.json"
+  },
+  "files": ["extension.ts", "src", "pi.protocol.json", "README.md"],
+  "scripts": {
+    "typecheck": "tsc --noEmit --preserveSymlinks",
+    "test": "node --preserve-symlinks --import tsx --test test/*.test.ts",
+    "check": "npm run typecheck && npm test"
+  },
+  "pi": {
+    "extensions": ["./extension.ts"]
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@kybernetria/pi-protocol": "^1.0.10",
+    "@mariozechner/pi-ai": "npm:@earendil-works/pi-ai@^0.80.10"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.80.10",
+    "@types/node": "^26.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
