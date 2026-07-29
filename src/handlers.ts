@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { ProtocolHandler, ProtocolInvocationContext } from "@kybernetria/pi-protocol";
+import type { ProtocolHandler, ProtocolInvocationContext } from "@kybernetria/pi-protocol/core";
 import { CommunityStackClient, DEFAULT_COMMUNITY_ID } from "./client.ts";
 
 export const PROVIDE_NAMES = ["schema", "search", "add_tool", "propose_assertion", "list_tools"] as const;

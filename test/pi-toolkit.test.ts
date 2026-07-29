@@ -4,7 +4,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import test from "node:test";
-import { ensureProtocolFabric, type PiProtocolManifest } from "@kybernetria/pi-protocol";
+import { ensureProtocolFabric } from "@kybernetria/pi-protocol/core";
+import { parseProtocolManifest } from "@kybernetria/pi-protocol/contract";
 import piToolkitExtension from "../extension.ts";
 import {
   CommunityStackApiError,
@@ -101,13 +102,12 @@ function handlerEnv(path: string, community = "research"): NodeJS.ProcessEnv {
 }
 
 test("extension registers all five handler provides without a token and invocation fails closed", async () => {
-  const manifest = JSON.parse(await readFile(new URL("../pi.protocol.json", import.meta.url), "utf8")) as PiProtocolManifest;
-  assert.equal(manifest.protocolVersion, "0.2.0");
-  assert.equal(manifest.nodeId, "pi_toolkit");
-  assert.equal(manifest.packageId, "pi-toolkit");
-  assert.equal(manifest.version, "0.1.0");
+  const definition = parseProtocolManifest(await readFile(new URL("../pi.protocol.json", import.meta.url), "utf8"), { allowLegacyV02: false });
+  const manifest = definition.manifest;
+  assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.node.id, "pi_toolkit");
+  assert.equal(definition.sourceSchemaVersion, 1);
   assert.deepEqual(manifest.provides.map((provide) => provide.name), [...PROVIDE_NAMES]);
-  assert.deepEqual(manifest.provides.map((provide) => provide.execution), PROVIDE_NAMES.map((handler) => ({ type: "handler", handler })));
   assert.equal(JSON.stringify(manifest).includes("COMMUNITY_STACK_APP_TOKEN"), false);
   const search = manifest.provides.find((provide) => provide.name === "search");
   assert.ok(search);
@@ -126,9 +126,13 @@ test("extension registers all five handler provides without a token and invocati
   process.env.COMMUNITY_STACK_SOCKET = "/unused/community.sock";
   process.env.COMMUNITY_STACK_COMMUNITY_ID = "research";
   const tools: string[] = [];
+  let shutdown: (() => Promise<void>) | undefined;
   const fabric = ensureProtocolFabric();
   try {
-    assert.doesNotThrow(() => piToolkitExtension({ registerTool(tool: { name: string }) { tools.push(tool.name); } } as never));
+    assert.doesNotThrow(() => piToolkitExtension({
+      registerTool(tool: { name: string }) { tools.push(tool.name); },
+      on(event: string, callback: () => Promise<void>) { if (event === "session_shutdown") shutdown = callback; },
+    } as never));
     assert.deepEqual(tools, []);
     assert.deepEqual(fabric.describeNode("pi_toolkit")?.provides.map((provide) => provide.name), [...PROVIDE_NAMES]);
     assert.deepEqual(await fabric.invoke({ nodeId: "pi_toolkit", provide: "schema", input: { operation: "list" } }), {
@@ -139,7 +143,7 @@ test("extension registers all five handler provides without a token and invocati
       },
     });
   } finally {
-    fabric.unregister("pi_toolkit");
+    await shutdown?.();
     process.env = saved;
   }
 });

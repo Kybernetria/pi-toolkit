@@ -1,21 +1,21 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import {
-  createProtocolNamespace,
-  ensureProtocolFabric,
-  parseProtocolManifest,
-  registerProtocolManifest,
-} from "@kybernetria/pi-protocol";
+import { ensureProtocolFabric } from "@kybernetria/pi-protocol/core";
+import { parseProtocolManifest } from "@kybernetria/pi-protocol/contract";
 import { createHandlers } from "./src/handlers.ts";
 
-const manifest = parseProtocolManifest(
+const definition = parseProtocolManifest(
   readFileSync(fileURLToPath(new URL("./pi.protocol.json", import.meta.url)), "utf8"),
+  { allowLegacyV02: false },
 );
-const protocol = createProtocolNamespace(manifest);
 
-export default function piToolkitExtension(_pi: ExtensionAPI): void {
+export default function piToolkitExtension(pi: ExtensionAPI): void {
   const fabric = ensureProtocolFabric();
-  fabric.unregister(protocol.nodeId);
-  registerProtocolManifest(fabric, { manifest, handlers: createHandlers() });
+  const registration = fabric.install(definition, { handlers: createHandlers() }, {
+    packageId: "pi-toolkit",
+    packageVersion: "0.1.0",
+    sourcePath: fileURLToPath(new URL(".", import.meta.url)),
+  });
+  pi.on("session_shutdown", async () => { await registration.dispose(); });
 }
