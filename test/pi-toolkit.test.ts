@@ -1,3 +1,7 @@
+async function invokeResult(fabric: { invokeTracked(request: any): Promise<any> }, request: any): Promise<any> {
+  return (await fabric.invokeTracked(request)).result;
+}
+
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -102,11 +106,10 @@ function handlerEnv(path: string, community = "research"): NodeJS.ProcessEnv {
 }
 
 test("extension registers all five handler provides without a token and invocation fails closed", async () => {
-  const definition = parseProtocolManifest(await readFile(new URL("../pi.protocol.json", import.meta.url), "utf8"), { allowLegacyV02: false });
+  const definition = parseProtocolManifest(await readFile(new URL("../pi.protocol.json", import.meta.url), "utf8"));
   const manifest = definition.manifest;
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.node.id, "pi_toolkit");
-  assert.equal(definition.sourceSchemaVersion, 1);
   assert.deepEqual(manifest.provides.map((provide) => provide.name), [...PROVIDE_NAMES]);
   assert.equal(JSON.stringify(manifest).includes("COMMUNITY_STACK_APP_TOKEN"), false);
   const search = manifest.provides.find((provide) => provide.name === "search");
@@ -135,7 +138,7 @@ test("extension registers all five handler provides without a token and invocati
     } as never));
     assert.deepEqual(tools, []);
     assert.deepEqual(fabric.describeNode("pi_toolkit")?.provides.map((provide) => provide.name), [...PROVIDE_NAMES]);
-    assert.deepEqual(await fabric.invoke({ nodeId: "pi_toolkit", provide: "schema", input: { operation: "list" } }), {
+    assert.deepEqual(await invokeResult(fabric, { nodeId: "pi_toolkit", provide: "schema", input: { operation: "list" } }), {
       ok: false,
       error: {
         code: "EXECUTION_FAILED",
